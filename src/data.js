@@ -182,9 +182,9 @@ ch4: {
   lead: "马路不平、电灯不明、电话不灵。下雨水泥路，晴天扬灰路。人手就这么多，冬天一天天近了。",
   seconds: 90,
   sites: [
-    { id: "dorm",    name: "学生宿舍",     need: 1200, unit: "人",     work: 360, icon: "dorm",    note: "先有住处，人才留得下" },
-    { id: "teach",   name: "教学中心大楼", need: 24,   unit: "间教室", work: 220, icon: "teach",   note: "课一天都不能停" },
-    { id: "boiler",  name: "锅炉房",       need: 36,   unit: "处暖气", work: 160, icon: "boiler",  note: "冬天教室只靠一个小炉子取暖" },
+    { id: "dorm",    name: "学生宿舍",     need: 1200, unit: "人",     work: 400, icon: "dorm",    note: "先有住处，人才留得下" },
+    { id: "teach",   name: "教学中心大楼", need: 24,   unit: "间教室", work: 240, icon: "teach",   note: "课一天都不能停" },
+    { id: "boiler",  name: "锅炉房",       need: 36,   unit: "处暖气", work: 190, icon: "boiler",  note: "冬天教室只靠一个小炉子取暖" },
     { id: "canteen", name: "食堂",         need: 8,    unit: "口大灶", work: 80,  icon: "canteen", note: "几千人吃饭，灶不能凉" }
   ],
   workers: { perTeacher: 1, base: 1 },
