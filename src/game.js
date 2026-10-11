@@ -232,7 +232,7 @@
       const w = wagon.clientWidth - 12;
       const byW = Math.floor((w - gap * (COLS - 1)) / COLS);
       const byH = Math.floor((availH - 12 - gap * (ROWS - 1)) / ROWS);
-      cell = Math.max(24, Math.min(byW, byH));      // 同时受宽与高限制：矮屏上车皮自动缩小
+      cell = Math.max(20, Math.min(byW, byH));      // 同时受宽与高限制：矮屏上车皮自动缩小
       grid.style.gridTemplateColumns = `repeat(${COLS},${cell}px)`;
       grid.style.gridAutoRows = cell + "px";
       grid.innerHTML = new Array(COLS * ROWS).fill('<div class="c"></div>').join("");
