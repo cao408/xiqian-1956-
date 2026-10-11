@@ -929,8 +929,17 @@
 
     x.textAlign = "left"; x.fillStyle = "#8b7a63"; x.font = "24px 'Songti SC',serif";
     x.fillText("成就", 120, 730);
-    x.fillStyle = "#3a2f24"; x.font = "26px 'Songti SC',serif";
-    x.fillText(got.length ? got.map(a => a.name).join("・") : "——", 120, 770);
+    x.fillStyle = "#3a2f24"; x.font = "24px 'Songti SC',serif";
+    // 成就按整名折行（在"・"处断开），避免把名字劈成两行、也不冲出边框
+    const achNames = got.length ? got.map(a => a.name) : ["——"];
+    let achLine = "", achLines = [];
+    achNames.forEach(nm => {
+      const t = achLine ? achLine + "・" + nm : nm;
+      if (achLine && x.measureText(t).width > W - 240) { achLines.push(achLine); achLine = nm; }
+      else achLine = t;
+    });
+    achLines.push(achLine);
+    achLines.forEach((l, i) => x.fillText(l, 120, 766 + i * 34));
 
     x.font = "24px 'Songti SC',serif"; x.fillStyle = "#5b4c3b"; x.textAlign = "center";
     wrapText(x, "「" + DATA.epilogue.poem + "」", W / 2, 856, W - 180, 36);
@@ -940,13 +949,14 @@
 
     $("#shareImg").src = c.toDataURL("image/jpeg", 0.92);
   }
-  function wrapText(x, text, cx, y, maxW, lh) {
+  function wrapText(x, text, cx, y, maxW, lh, align) {
     let line = "", lines = [];
     for (const ch of text) {
       if (x.measureText(line + ch).width > maxW) { lines.push(line); line = ch; }
       else line += ch;
     }
     lines.push(line);
+    if (align) x.textAlign = align;                 // "left" 时 cx 为左边界
     lines.forEach((l, i) => x.fillText(l, cx, y + i * lh));
   }
 
