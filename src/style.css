@@ -161,6 +161,15 @@ body::before{
                transform:rotate(-1.5deg)}
 .chip.big svg{height:52px}
 .note{margin-top:8px;font-size:12.5px;color:var(--faint)}
+/* 矮屏：物品柜改成 9 列 2 行、小卡，保证 18 件全部露在底栏之上 */
+@media (max-height:700px){
+  .tray{grid-template-columns:repeat(9,minmax(0,1fr));gap:4px}
+  .chip svg{height:20px}
+  .chip .nm{font-size:8.5px}
+  .chip .meta{display:none}
+  .foot .btn{padding:10px;font-size:16px}
+  .wrap2 .note{display:none}
+}
 .staylist{margin-top:8px;font-size:13px;color:var(--ink-2)}
 .staylist b{color:var(--seal);font-weight:normal}
 

@@ -211,12 +211,14 @@
       <div class="wrap2">
         <div class="wagon" id="wagon"><div class="grid" id="grid"></div></div>
         <div class="note" id="note2">拖动放进格子；点物品选中后可用「旋转」换方向；点已装的取下。</div>
-        <div class="tools" id="tools" hidden></div>
-        <div class="tray" id="tray"></div>
       </div>
       <div id="fb2"></div>
       </div>
-      <div class="foot" id="foot2"><button class="btn" id="done2">装车完成</button></div>`;
+      <div class="foot" id="foot2">
+        <div class="tools" id="tools" hidden></div>
+        <div class="tray" id="tray"></div>
+        <button class="btn" id="done2">装车完成</button>
+      </div>`;
     renderRes($(".topbar .res", pane));
 
     const grid = $("#grid", pane), wagon = $("#wagon", pane), tools = $("#tools", pane);
@@ -224,8 +226,13 @@
     let cell = 0, gap = 2;
 
     function layout() {
+      const body = pane.querySelector(".body");
+      const above = pane.querySelector(".lead").offsetHeight + pane.querySelector(".gauge").offsetHeight + 30;
+      const availH = Math.max(160, body.clientHeight - above);
       const w = wagon.clientWidth - 12;
-      cell = Math.floor((w - gap * (COLS - 1)) / COLS);
+      const byW = Math.floor((w - gap * (COLS - 1)) / COLS);
+      const byH = Math.floor((availH - 12 - gap * (ROWS - 1)) / ROWS);
+      cell = Math.max(24, Math.min(byW, byH));      // 同时受宽与高限制：矮屏上车皮自动缩小
       grid.style.gridTemplateColumns = `repeat(${COLS},${cell}px)`;
       grid.style.gridAutoRows = cell + "px";
       grid.innerHTML = new Array(COLS * ROWS).fill('<div class="c"></div>').join("");
