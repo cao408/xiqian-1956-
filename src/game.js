@@ -261,14 +261,37 @@
     }
     function weightOf(id) { return C.items.find(t => t.id === id).wt; }
 
-    /* 依次尝试左上对齐的多个锚点，找到能放下的位置 */
-    function autoPlace(id, col, row) {
+    /* 依次尝试左上对齐的多个锚点，找到能放下的位置：
+       先试落点附近（保持“放哪儿就是哪儿”的手感），附近全占满则全车皮找离落点最近的空位 */
+    function spotFor(id, col, row) {
       const it = C.items.find(t => t.id === id), cells = maskOf(it), b = bbox(cells);
+      const near = [];
       for (let dr = 0; dr < b.h; dr++)
-        for (let dc = 0; dc < b.w; dc++)
-          if (fits(col - dc, row - dr, cells, id) &&
-              usedW + it.wt <= G.res.load && place(id, col - dc, row - dr)) return true;
-      return false;
+        for (let dc = 0; dc < b.w; dc++) near.push([col - dc, row - dr]);
+      const rest = [];
+      for (let r0 = 0; r0 + b.h <= ROWS; r0++)
+        for (let c0 = 0; c0 + b.w <= COLS; c0++) rest.push([c0, r0]);
+      rest.sort((p, q) => (Math.abs(p[0] - col) + Math.abs(p[1] - row)) -
+                          (Math.abs(q[0] - col) + Math.abs(q[1] - row)));
+      const seen = {}, list = [];
+      near.concat(rest).forEach(p => {
+        if (p[0] < 0 || p[1] < 0) return;
+        const k = p[0] + "," + p[1];
+        if (seen[k]) return;
+        seen[k] = 1; list.push(p);
+      });
+      for (const p of list) if (fits(p[0], p[1], cells, id)) return p;
+      return null;
+    }
+    function autoPlace(id, col, row) {
+      const it = C.items.find(t => t.id === id);
+      if (usedW + it.wt > G.res.load) {
+        toast("载重不够了：再加这一件就超了 " + G.res.load + " 吨");
+        return false;
+      }
+      const spot = spotFor(id, col, row);
+      if (!spot) { toast("车里的空位都塞不下它了，先挪走点东西"); return false; }
+      return place(id, spot[0], spot[1]);
     }
     function place(id, col, row) {
       const it = C.items.find(t => t.id === id), cells = maskOf(it);
@@ -394,8 +417,7 @@
                        ev.clientY > r.top - 30 && ev.clientY < r.bottom + 30;
         if (inside) {
           const c = cellAt(ev.clientX, ev.clientY);
-          if (!autoPlace(it.id, c.col, c.row)) toast("这里放不下，换个位置或换个方向");
-          else sel = null;
+          if (autoPlace(it.id, c.col, c.row)) sel = null;    // 失败原因由 autoPlace 自己提示，别覆盖
         }
         refresh();
       }
@@ -439,13 +461,15 @@
     let ghostEls = [];
     function showGhost(col, row, it) {
       clearGhost();
-      const cells = maskOf(it), b = bbox(cells);
-      if (col < 0 || row < 0 || col + b.w > COLS || row + b.h > ROWS) return;
-      const pad = 6, ok = fits(col, row, cells, it.id);
+      const cells = maskOf(it), b = bbox(cells), pad = 6;
+      const spot = spotFor(it.id, col, row);                 // 预览真实落点，而不是手指所在格
+      const at = spot || [Math.max(0, Math.min(COLS - b.w, col)),
+                          Math.max(0, Math.min(ROWS - b.h, row))];
+      const ok = !!spot;
       cells.forEach(c => {
         const g = el("div", "gcell" + (ok ? "" : " bad"));
-        g.style.left = (pad + (col + c[0]) * (cell + gap)) + "px";
-        g.style.top = (pad + (row + c[1]) * (cell + gap)) + "px";
+        g.style.left = (pad + (at[0] + c[0]) * (cell + gap)) + "px";
+        g.style.top = (pad + (at[1] + c[1]) * (cell + gap)) + "px";
         g.style.width = cell + "px";
         g.style.height = cell + "px";
         wagon.appendChild(g);
@@ -459,13 +483,7 @@
       if (e.target.closest(".pic") || e.target.closest(".pcell")) return;
       const it = C.items.find(t => t.id === sel);
       const c = (e.clientX || e.clientY) ? cellAt(e.clientX, e.clientY) : { col: 0, row: 0 };
-      let done = autoPlace(it.id, c.col, c.row);
-      if (!done) {                                  // 点在没有坐标的合成事件上时，扫一遍找空位
-        const cells = maskOf(it), b = bbox(cells);
-        for (let row = 0; row + b.h <= ROWS && !done; row++)
-          for (let col = 0; col + b.w <= COLS && !done; col++)
-            done = fits(col, row, cells, it.id) && place(it.id, col, row);
-      }
+      const done = autoPlace(it.id, c.col, c.row);        // 已能全盘找空位，无需再扫
       if (done) sel = null;
       refresh();
     });
@@ -937,7 +955,7 @@
   function toast(msg) {
     let t = $("#toast");
     if (!t) { t = el("div", "", ""); t.id = "toast";
-      t.style.cssText = "position:fixed;left:50%;bottom:14%;transform:translateX(-50%);z-index:60;" +
+      t.style.cssText = "position:fixed;left:50%;bottom:16%;transform:translateX(-50%);z-index:60;pointer-events:none;" +
         "background:rgba(58,47,36,.92);color:#f7f1e3;padding:9px 14px;border-radius:20px;font-size:13.5px;" +
         "max-width:86vw;text-align:center;transition:opacity .25s";
       document.body.appendChild(t); }
