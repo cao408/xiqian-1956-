@@ -356,57 +356,77 @@
       refresh();
     }
 
-    /* 拖拽：指针事件，兼容触屏；同时支持"点选 → 点格子" */
+    /* 拖拽：指针事件，兼容触屏；同时支持"点选 → 点格子"
+       监听器只绑一次，并带全局兜底：任何一次手势没有正常收尾（指针在窗口外抬起、
+       中途失焦、捕获丢失），下一次拖动前都会把残留状态清干净，物品不会被卡住 */
     function attachDrag(chip, it) {
-      let ghost = null, moved = false, startX = 0, startY = 0, pid = null;
+      const S = { ghost: null, moved: false, startX: 0, startY: 0, pid: null, active: false };
+
+      function clearGhosts() {
+        if (S.ghost) { S.ghost.remove(); S.ghost = null; }
+        document.querySelectorAll(".chip.dragging").forEach(n => n.remove());   // 清掉可能遗留的分身
+        clearGhost();
+        chip.classList.remove("gone");
+      }
+
+      function finish(ev, cancelled) {
+        if (!S.active) return;
+        const wasMoved = S.moved, pid = S.pid;
+        S.active = false; S.moved = false; S.pid = null;
+        try { if (pid !== null && chip.hasPointerCapture && chip.hasPointerCapture(pid)) chip.releasePointerCapture(pid); } catch (err) { /* 忽略 */ }
+        clearGhosts();
+        if (cancelled) { refresh(); return; }
+        if (!wasMoved) {                              // 没动 → 视为点选
+          sel = (sel === it.id) ? null : it.id;
+          if (sel) toast("已选中：" + (SHORT[it.id] || it.name) + "，拖动或点格子放入");
+          refresh();
+          return;
+        }
+        const r = grid.getBoundingClientRect();
+        const inside = ev.clientX > r.left - 30 && ev.clientX < r.right + 30 &&
+                       ev.clientY > r.top - 30 && ev.clientY < r.bottom + 30;
+        if (inside) {
+          const c = cellAt(ev.clientX, ev.clientY);
+          if (!autoPlace(it.id, c.col, c.row)) toast("这里放不下，换个位置或换个方向");
+          else sel = null;
+        }
+        refresh();
+      }
 
       chip.addEventListener("pointerdown", (e) => {
         if (placed[it.id]) return;
-        pid = e.pointerId; moved = false; startX = e.clientX; startY = e.clientY;
-        try { chip.setPointerCapture(pid); } catch (err) { /* 合成事件或不支持时忽略 */ }
-        const move = (ev) => {
-          if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 6) {
-            moved = true;
-            ghost = chip.cloneNode(true);
-            ghost.classList.add("dragging");
-            ghost.style.width = chip.clientWidth + "px";
-            document.body.appendChild(ghost);
-            chip.classList.add("gone");
-          }
-          if (moved && ghost) {
-            ghost.style.left = (ev.clientX - ghost.clientWidth / 2) + "px";
-            ghost.style.top = (ev.clientY - 30) + "px";
-            const c = cellAt(ev.clientX, ev.clientY);
-            showGhost(c.col, c.row, it);
-          }
-        };
-        const up = (ev) => {
-          chip.removeEventListener("pointermove", move);
-          chip.removeEventListener("pointerup", up);
-          chip.removeEventListener("pointercancel", up);
-          if (ghost) { ghost.remove(); ghost = null; }
-          clearGhost();
-          chip.classList.remove("gone");
-          if (!moved) {                       // 视为点选
-            sel = (sel === it.id) ? null : it.id;
-            if (sel) toast("已选中：" + (SHORT[it.id] || it.name) + "，拖动或点格子放入");
-            refresh();
-            return;
-          }
-          const c = cellAt(ev.clientX, ev.clientY);
-          const r = grid.getBoundingClientRect();
-          const inside = ev.clientX > r.left - 30 && ev.clientX < r.right + 30 &&
-                         ev.clientY > r.top - 30 && ev.clientY < r.bottom + 30;
-          if (inside) {
-            if (!autoPlace(it.id, c.col, c.row)) toast("这里放不下，换个位置或换个方向");
-            else sel = null;
-            refresh();
-          }
-        };
-        chip.addEventListener("pointermove", move);
-        chip.addEventListener("pointerup", up);
-        chip.addEventListener("pointercancel", up);
+        document.querySelectorAll(".chip.dragging").forEach(n => n.remove());   // 上一轮万一没收尾，先清掉
+        S.pid = e.pointerId; S.moved = false; S.active = true;
+        S.startX = e.clientX; S.startY = e.clientY;
+        try { chip.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件或不支持时忽略 */ }
       });
+
+      chip.addEventListener("pointermove", (e) => {
+        if (!S.active || e.pointerId !== S.pid) return;
+        if (!S.moved && Math.hypot(e.clientX - S.startX, e.clientY - S.startY) > 6) {
+          S.moved = true;
+          S.ghost = chip.cloneNode(true);
+          S.ghost.classList.add("dragging");
+          S.ghost.style.width = chip.clientWidth + "px";
+          document.body.appendChild(S.ghost);
+          chip.classList.add("gone");
+        }
+        if (S.moved && S.ghost) {
+          S.ghost.style.left = (e.clientX - S.ghost.clientWidth / 2) + "px";
+          S.ghost.style.top = (e.clientY - 30) + "px";
+          const c = cellAt(e.clientX, e.clientY);
+          showGhost(c.col, c.row, it);
+        }
+      });
+
+      chip.addEventListener("pointerup", (e) => { if (e.pointerId === S.pid) finish(e, false); });
+      chip.addEventListener("pointercancel", (e) => { if (e.pointerId === S.pid) finish(e, true); });
+
+      // 全局兜底：正常路径由 chip 自己的 pointerup 先处理；若它没跑（元素被重建、捕获丢失），这里收尾
+      const bail = () => { setTimeout(() => { if (S.active) finish({ clientX: -9999, clientY: -9999 }, true); }, 0); };
+      window.addEventListener("pointerup", bail, true);
+      window.addEventListener("pointercancel", bail, true);
+      window.addEventListener("blur", bail);
     }
 
     let ghostEls = [];
@@ -529,15 +549,17 @@
 
     pane.innerHTML = topbar(C.title, C.period) + `<div class="body">
       <div class="lead">${C.lead}</div>
-      <div class="timer">距入冬 <b id="t-s">90</b> 秒<div class="bar"><i id="t-b"></i></div></div>
+      <div class="timer">距入冬 <b id="t-s">90</b> 天<div class="bar"><i id="t-b"></i></div></div>
       <div class="sites" id="sites"></div>
-      <div class="note">点人手选中，再点工地把人派过去；点工地里的人可以撤回。</div>
+      <div class="note">点人手选中，再点工地把人派过去；直接点工地也行。点工地里的人可以撤回。</div>
       <div class="pool" id="pool"></div>
       <div id="fb4"></div>
     </div>`;
     renderRes($(".topbar .res", pane));
 
     const siteBox = $("#sites", pane), pool = $("#pool", pane);
+    let selWk = false, lastSig = "";               // 人员/选择未变时不动 DOM，避免重建吃掉点击
+
     C.sites.forEach(s => {
       const d = el("div", "site", `<div class="ic">${ART.icon(s.icon)}</div>
         <div class="mid"><div class="nm">${s.name}</div>
@@ -546,41 +568,47 @@
           <div class="ct" id="ct-${s.id}">0%　0 人</div></div>
         <div class="wks" id="wks-${s.id}"></div>`);
       d.dataset.id = s.id;
-      d.onclick = (e) => {
+      d.addEventListener("pointerdown", (e) => {
+        const st = G.sites[s.id];
         if (e.target.closest(".wk")) {           // 点已派到工地的人 → 撤回人力池
-          const st = G.sites[s.id];
-          if (st.wk > 0) { st.wk--; free++; selWk = 0; render(); toast("撤回 1 人"); }
+          if (st.wk > 0) { st.wk--; free++; selWk = false; sync(); toast("撤回 1 人"); }
           return;
         }
-        if (selWk) {
-          const st = G.sites[s.id];
-          st.wk++; free--; selWk = 0; render();
-        }
-      };
+        if (st.done >= s.need) { toast("这摊子已经干完了"); return; }
+        if (free <= 0) { toast("人手都用上了，先从别处撤回一个"); return; }
+        st.wk++; free--; selWk = false; sync();  // 选了人再点、或直接点工地，都派一个过去
+      });
       siteBox.appendChild(d);
     });
 
-    let selWk = 0;
-    function render() {
+    function sync() { lastSig = ""; render(); }
+    function renderProgress() {
       C.sites.forEach(s => {
         const st = G.sites[s.id];
-        const r = st.done / s.need;
-        $("#pb-" + s.id, pane).style.width = Math.round(r * 100) + "%";
+        $("#pb-" + s.id, pane).style.width = Math.round(st.done / s.need * 100) + "%";
         $("#ct-" + s.id, pane).textContent =
           Math.round(st.done) + " / " + s.need + " " + s.unit + "　" + st.wk + " 人";
-        const box = $("#wks-" + s.id, pane);
-        if (box) {
+      });
+    }
+    function render() {
+      const sig = C.sites.map(s => G.sites[s.id].wk).join(",") + "|" + free + "|" + (selWk ? 1 : 0);
+      if (sig !== lastSig) {
+        lastSig = sig;
+        C.sites.forEach(s => {
+          const st = G.sites[s.id], box = $("#wks-" + s.id, pane);
+          if (!box) return;
           box.innerHTML = "";
           for (let k = 0; k < st.wk; k++) box.appendChild(el("div", "wk mini", ART.icon("bolt")));
+        });
+        pool.innerHTML = "";
+        for (let k = 0; k < free; k++) {
+          const w = el("div", "wk" + (selWk ? " free" : ""), ART.icon("bolt"));
+          w.addEventListener("pointerdown", (e) => { e.preventDefault(); selWk = !selWk; sync(); });
+          pool.appendChild(w);
         }
-      });
-      pool.innerHTML = "";
-      for (let k = 0; k < free; k++) {
-        const w = el("div", "wk" + (selWk ? " free" : ""), ART.icon("bolt"));
-        w.onclick = () => { selWk = selWk ? 0 : 1; render(); };
-        pool.appendChild(w);
+        for (let k = 0; k < workers - free; k++) pool.appendChild(el("div", "wk slot", ART.icon("bolt")));
       }
-      for (let k = 0; k < workers - free; k++) pool.appendChild(el("div", "wk slot", ART.icon("bolt")));
+      renderProgress();
     }
     render();
 
@@ -817,7 +845,7 @@
       </div>
       <div class="hint">成就</div>
       <div class="ach">${DATA.achievements.map(a =>
-        `<div class="${A[a.id] ? "got" : ""}">${ART.icon(A[a.id] ? "star" : "card")}<b style="font-size:12px">${a.name}</b><br>${a.desc}</div>`).join("")}</div>
+        `<div class="${A[a.id] ? "got" : ""}"><div class="h">${ART.icon(A[a.id] ? "star" : "card")}<b>${a.name}</b></div><div class="d">${a.desc}</div></div>`).join("")}</div>
       <div class="hint">长按图片保存，转发给同学</div>
       <img id="shareImg" alt="我的 1956 校园">
       <div class="strip">${DATA.epilogue.imgs.map(f =>
